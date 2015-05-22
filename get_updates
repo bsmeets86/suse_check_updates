@@ -1,0 +1,95 @@
+#!/usr/bin/python3.4
+
+############# IMPORTS #############
+import lxml.html
+import re
+import sys
+import datetime
+from urllib.request import urlopen
+
+########### FUNCTIONS #############
+# Return the HTML
+def check(url):
+	data = urlopen(url).read()
+	return data.decode('utf-8', 'ignore')
+
+def parse_html(el,os,pat):
+	# Open the updates.csv file for writing
+	file_object = open("updates","a")
+	for i in el:
+		# check if the URL is a digit
+		if i[0].isdigit():
+			# Combine the URL we use to get the updates
+			url = main_url + i
+			# Check of $os is the file
+			if re.search(os, check(url)) is not None:
+				for lines in check(url).split('\n'):
+					# Get the date of the patch
+					if re.search("<I>", lines) is not None:
+						date_today = str(datetime.datetime.date(datetime.datetime.now()))
+						date = lines.partition("<I>")
+						date = date[2].strip()
+						date = date[4:-22] + " 2015"
+						date = str(datetime.datetime.strptime(date, '%b %d %Y')) 
+						date = date[0:10] 
+					# Get the description
+					if re.search("SUSE Security Update:", lines) is not None:
+						description = lines.partition("SUSE Security Update:")
+						description = description[2].strip()
+					# Get the rating
+					elif re.search("Rating:.*?", lines) is not None:
+						rating = lines.partition("Rating:")
+						rating = rating[2].strip()
+					# Get the announcement ID
+					elif re.search("Announcement ID.*?", lines) is not None:
+						announcement_id = lines.partition("Announcement ID:")
+						announcement_id = announcement_id[2].strip()
+					# Get the patch name
+					elif re.search(pat, lines) is not None:
+						patch = lines.partition("zypper in -t patch")
+						patch = patch[2].strip()
+						# Because we don't need live patching we filter those out
+						if re.search("SUSE-SLE-Live-Patching.*?", patch) is None:
+							# Write to the file (updates.csv)
+							file_object.write(date + ";" + os + ";" + description + ";" + rating + ";" + announcement_id + ";" + patch + "\n")
+							break
+						continue
+				# Check if patch date and current date is the same, and do stuff
+				if date_today == date and rating == 'critical':
+					print("Do something") 
+	# Close the object
+	file_object.close()
+
+########## VARIABLES ###########
+doc = lxml.html.document_fromstring(check('http://lists.suse.com/pipermail/sle-security-updates/2015-May/date.html'))
+el = doc.xpath("//a/@href")
+main_url = 'http://lists.suse.com/pipermail/sle-security-updates/2015-May/'
+
+############# MAIN #############
+try: 
+	parse_html(el, "SUSE Linux Enterprise Server 11 SP3", "zypper in -t patch slessp3")
+except KeyboardInterrupt:
+	sys.exit("\nCanceled by user")
+except:
+	pass
+
+try:
+	parse_html(el, "SUSE Linux Enterprise Server 12", "zypper in -t patch SUSE-SLE-SERVER-12")
+except KeyboardInterrupt:
+        sys.exit("\nCanceled by user")
+except:
+	pass
+
+try:
+	parse_html(el, "SUSE Linux Enterprise Software Development Kit 11 SP3", "zypper in -t patch sdksp3")
+except KeyboardInterrupt:
+        sys.exit("\nCanceled by user")
+except:
+	pass
+
+try:
+	parse_html(el, "SUSE Linux Enterprise Software Development Kit 12", "zypper in -t patch SUSE-SLE-SDK-12")
+except KeyboardInterrupt:
+        sys.exit("\nCanceled by user")
+except:
+	pass
